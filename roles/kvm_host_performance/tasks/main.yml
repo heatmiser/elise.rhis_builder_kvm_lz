@@ -1,0 +1,164 @@
+---
+# =====================================================================
+# KVM Hypervisor Performance Tuning
+# =====================================================================
+# Applies IBM KVM best practices:
+#   - tuned virtual-host profile
+#   - KVM module parameters (hpage, halt_poll_ns)
+#   - Huge pages reservation
+#   - CPU scheduler migration cost
+#   - cgroup cpuset controller (cgroups v1 only)
+#   - Intel IOMMU (conditional — hardware detection gated)
+# =====================================================================
+
+# =====================================================================
+# --- TUNED PROFILE ---
+# =====================================================================
+
+- name: Ensure tuned is installed
+  ansible.builtin.dnf:
+    name: tuned
+    state: present
+
+- name: Enable and start tuned service
+  ansible.builtin.systemd:
+    name: tuned
+    enabled: true
+    state: started
+
+- name: Set tuned profile to virtual-host
+  ansible.builtin.command: tuned-adm profile {{ kvm_host_performance_tuned_profile }}
+  register: __kvm_host_performance_tuned_set
+  changed_when: "'Tuning was successfully switched' in __kvm_host_performance_tuned_set.stdout"
+
+- name: Verify active tuned profile
+  ansible.builtin.command: tuned-adm active
+  register: __kvm_host_performance_tuned_active
+  changed_when: false
+
+- name: Display active tuned profile
+  ansible.builtin.debug:
+    msg: "{{ __kvm_host_performance_tuned_active.stdout }}"
+    verbosity: 1
+
+# =====================================================================
+# --- KVM MODULE PARAMETERS ---
+# =====================================================================
+
+- name: Configure KVM module parameters for performance
+  ansible.builtin.lineinfile:
+    path: /etc/modprobe.d/kvm.conf
+    regexp: "^options kvm {{ item.key }}="
+    line: "options kvm {{ item.key }}={{ item.value }}"
+    create: true
+    mode: "0644"
+  loop:
+    - key: "hpage"
+      value: "{{ kvm_host_performance_kvm_hpage }}"
+    - key: "halt_poll_ns"
+      value: "{{ kvm_host_performance_kvm_halt_poll_ns }}"
+  notify: "KVM module reload required"
+
+# =====================================================================
+# --- HUGE PAGES ---
+# =====================================================================
+
+- name: Calculate huge pages count from percentage of total RAM
+  ansible.builtin.set_fact:
+    __kvm_host_performance_calculated_hugepages: >-
+      {{ ((ansible_facts['memtotal_mb'] * kvm_host_performance_hugepages_percent / 100) / 2) | int }}
+
+- name: Reserve huge pages for KVM guests
+  ansible.posix.sysctl:
+    name: vm.nr_hugepages
+    value: "{{ kvm_host_performance_hugepages_count | default(__kvm_host_performance_calculated_hugepages) }}"
+    sysctl_set: true
+    state: present
+    reload: true
+
+# =====================================================================
+# --- CPU SCHEDULER ---
+# =====================================================================
+
+- name: Check if CPU scheduler migration cost parameter exists
+  ansible.builtin.stat:
+    path: /proc/sys/kernel/sched_migration_cost_ns
+  register: __kvm_host_performance_sched_migration_stat
+
+- name: Configure CPU scheduler migration cost
+  ansible.posix.sysctl:
+    name: kernel.sched_migration_cost_ns
+    value: "{{ kvm_host_performance_sched_migration_cost_ns }}"
+    sysctl_set: true
+    state: present
+    reload: true
+  when: __kvm_host_performance_sched_migration_stat.stat.exists
+
+# =====================================================================
+# --- CGROUP CONTROLLER ---
+# =====================================================================
+
+- name: Check cgroup version
+  ansible.builtin.shell: |
+    set -o pipefail
+    if [ -f /sys/fs/cgroup/cgroup.controllers ]; then
+      echo "v2"
+    else
+      echo "v1"
+    fi
+  register: __kvm_host_performance_cgroup_version
+  changed_when: false
+
+- name: Disable cpuset cgroup controller for CPU hotplug (cgroups v1 only)
+  ansible.builtin.lineinfile:
+    path: /etc/libvirt/qemu.conf
+    regexp: "^cgroup_controllers ="
+    line: 'cgroup_controllers = [ "cpu", "devices", "memory", "blkio", "cpuacct" ]'
+    backup: true
+  when: __kvm_host_performance_cgroup_version.stdout == "v1"
+  notify: "Libvirtd restart required"
+
+# =====================================================================
+# --- VERIFICATION AND DISPLAY ---
+# =====================================================================
+
+- name: Read huge pages status from /proc/meminfo
+  ansible.builtin.slurp:
+    src: /proc/meminfo
+  register: __kvm_host_performance_meminfo
+
+- name: Display huge pages status
+  ansible.builtin.debug:
+    msg: >-
+      {{ (__kvm_host_performance_meminfo.content | b64decode).splitlines()
+      | select('search', 'HugePage') | list }}
+    verbosity: 1
+
+- name: Display KVM performance parameters
+  ansible.builtin.debug:
+    msg:
+      - "KVM Performance Tuning:"
+      - "  - Huge pages: {{ kvm_host_performance_hugepages_count | default(__kvm_host_performance_calculated_hugepages) }} pages"
+      - "  - KVM halt_poll_ns: {{ kvm_host_performance_kvm_halt_poll_ns }} ns"
+      - >-
+        - CPU sched_migration_cost_ns: {{ kvm_host_performance_sched_migration_cost_ns }} ns
+        {{ '(configured)' if __kvm_host_performance_sched_migration_stat.stat.exists else '(not available on this kernel)' }}
+      - "  - Cgroup version: {{ __kvm_host_performance_cgroup_version.stdout }}"
+      - "  - cpuset disabled: {{ 'Yes' if __kvm_host_performance_cgroup_version.stdout == 'v1' else 'N/A (cgroups v2)' }}"
+    verbosity: 1
+
+# =====================================================================
+# --- INTEL IOMMU (conditional) ---
+# =====================================================================
+
+- name: Check Intel IOMMU hardware support (DMAR ACPI table)
+  ansible.builtin.stat:
+    path: /sys/firmware/acpi/tables/DMAR
+  register: __kvm_host_performance_dmar_stat
+
+- name: Configure Intel IOMMU
+  ansible.builtin.include_tasks: intel_iommu.yml
+  when:
+    - kvm_host_performance_enable_iommu | bool
+    - __kvm_host_performance_dmar_stat.stat.exists
+...

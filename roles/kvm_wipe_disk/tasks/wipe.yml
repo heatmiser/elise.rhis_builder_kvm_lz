@@ -1,0 +1,85 @@
+---
+# sub | Wipe a single disk using the configured method
+# Loop var: __kvm_wipe_disk_current_target (device path, e.g. /dev/nvme0n1)
+
+- name: "Sub | Display wipe operation: {{ __kvm_wipe_disk_current_target }}"
+  ansible.builtin.debug:
+    msg: "Wiping {{ __kvm_wipe_disk_current_target }} using method: {{ kvm_wipe_disk_method }}"
+
+- name: "Sub | Set log file path for this disk"
+  ansible.builtin.set_fact:
+    __kvm_wipe_disk_log_file: >-
+      {{ kvm_wipe_disk_log_path }}/wipe_{{ __kvm_wipe_disk_current_target | basename }}.log
+
+# =====================================================================
+# --- WIPE METHOD: BLKDISCARD (SSD TRIM — Default) ---
+# =====================================================================
+
+- name: "Sub | Wipe with blkdiscard (TRIM): {{ __kvm_wipe_disk_current_target }}"
+  ansible.builtin.shell: |
+    set -o pipefail
+    blkdiscard -v {{ __kvm_wipe_disk_current_target }} 2>&1 | tee -a {{ __kvm_wipe_disk_log_file }}
+  register: __kvm_wipe_disk_result
+  failed_when: false
+  changed_when: __kvm_wipe_disk_result.rc == 0
+  when: kvm_wipe_disk_method == "blkdiscard"
+  become: true
+
+# =====================================================================
+# --- WIPE METHOD: ZERO ---
+# =====================================================================
+
+- name: "Sub | Wipe with zeros: {{ __kvm_wipe_disk_current_target }}"
+  ansible.builtin.shell: |
+    set -o pipefail
+    dd if=/dev/zero of={{ __kvm_wipe_disk_current_target }} bs=1M status=progress 2>&1 | tee -a {{ __kvm_wipe_disk_log_file }}
+  register: __kvm_wipe_disk_result
+  failed_when: false
+  changed_when: __kvm_wipe_disk_result.rc == 0
+  when: kvm_wipe_disk_method == "zero"
+  become: true
+
+# =====================================================================
+# --- WIPE METHOD: SHRED ---
+# =====================================================================
+
+- name: "Sub | Wipe with shred (3-pass): {{ __kvm_wipe_disk_current_target }}"
+  ansible.builtin.shell: |
+    set -o pipefail
+    shred -v -n 3 {{ __kvm_wipe_disk_current_target }} 2>&1 | tee -a {{ __kvm_wipe_disk_log_file }}
+  register: __kvm_wipe_disk_result
+  failed_when: false
+  changed_when: __kvm_wipe_disk_result.rc == 0
+  when: kvm_wipe_disk_method == "shred"
+  become: true
+
+# =====================================================================
+# --- WIPE METHOD: NVME FORMAT ---
+# =====================================================================
+
+- name: "Sub | Wipe with nvme format (secure erase): {{ __kvm_wipe_disk_current_target }}"
+  ansible.builtin.shell: |
+    set -o pipefail
+    NS=$(basename {{ __kvm_wipe_disk_current_target }})
+    nvme format /dev/$(echo $NS | sed 's/n[0-9]*$//') -n $(echo $NS | grep -o 'n[0-9]*$' | sed 's/n//') -s 1 2>&1 | tee -a {{ __kvm_wipe_disk_log_file }}
+  register: __kvm_wipe_disk_result
+  failed_when: false
+  changed_when: __kvm_wipe_disk_result.rc == 0
+  when: kvm_wipe_disk_method == "nvme-format"
+  become: true
+
+# =====================================================================
+# --- RESULT RECORDING ---
+# =====================================================================
+
+- name: "Sub | Record result for {{ __kvm_wipe_disk_current_target }}"
+  ansible.builtin.set_fact:
+    __kvm_wipe_disk_results: >-
+      {{ __kvm_wipe_disk_results | combine({
+        __kvm_wipe_disk_current_target: {
+          'rc': __kvm_wipe_disk_result.rc,
+          'method': kvm_wipe_disk_method,
+          'status': 'SUCCESS' if __kvm_wipe_disk_result.rc == 0 else 'FAILED'
+        }
+      }) }}
+...

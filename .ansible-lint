@@ -1,0 +1,31 @@
+# ansible-lint configuration for elise.rhis_builder_kvm_lz
+---
+profile: production
+
+exclude_paths:
+  - .git/
+  - .github/
+  - .vscode/
+  - .devcontainer/
+  - .claude/
+  - .cache/
+
+skip_list:
+  - experimental
+  - role-name
+  - no-handler    # RAID setup tasks that run when changed are sequential setup steps,
+                  # not repetitive tasks suitable for handlers (roles/kvm_setup_raid/tasks/main.yml)
+
+warn_list:
+  - no-changed-when
+  - command-instead-of-module
+  - risky-file-permissions
+  - var-naming[no-role-prefix]   # Cross-role variable references (e.g., kvm_setup_raid_* in kvm_setup_libvirt)
+
+enable_list:
+  - yaml
+  - fqcn
+  - fqcn-builtins
+
+offline: false
+verbosity: 1

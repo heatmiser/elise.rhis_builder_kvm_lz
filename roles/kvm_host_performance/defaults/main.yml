@@ -1,0 +1,56 @@
+---
+# kvm_host_performance role defaults
+
+# =====================================================================
+# --- Tuned Profile ---
+# =====================================================================
+
+# tuned profile to apply
+# Default: virtual-host — Red Hat recommended profile for KVM hypervisors
+kvm_host_performance_tuned_profile: "virtual-host"
+
+# =====================================================================
+# --- Huge Pages ---
+# =====================================================================
+
+# Percentage of total host RAM to reserve for huge pages
+# Default: 70 — IBM KVM recommendation; leaves 30% for host OS overhead
+# Lab used: 70 (unchanged)
+kvm_host_performance_hugepages_percent: 70
+
+# Override automatic huge pages calculation (number of 2MB huge pages)
+# Default: unset — auto-calculated from kvm_host_performance_hugepages_percent
+# Set this explicitly to bypass the percentage calculation
+# kvm_host_performance_hugepages_count: ~
+
+# =====================================================================
+# --- KVM Module Parameters ---
+# =====================================================================
+
+# KVM halt_poll_ns: idle vCPU polling period in nanoseconds
+# Default: 50000 — IBM KVM recommendation; 0 for low CPU usage, 80000 for low latency
+# Lab used: 50000 (unchanged)
+kvm_host_performance_kvm_halt_poll_ns: 50000
+
+# KVM hpage: enable huge page support in KVM module (0=off, 1=on)
+# Default: 1 — must match kvm_host_performance_hugepages_percent > 0
+kvm_host_performance_kvm_hpage: 1
+
+# =====================================================================
+# --- CPU Scheduler ---
+# =====================================================================
+
+# kernel.sched_migration_cost_ns: CPU scheduler migration cost in nanoseconds
+# Default: 500000 — IBM KVM recommendation; reduces unnecessary task migrations
+# Note: this kernel parameter may not exist on all kernels; the role handles absence gracefully
+kvm_host_performance_sched_migration_cost_ns: 500000
+
+# =====================================================================
+# --- Intel IOMMU ---
+# =====================================================================
+
+# Enable Intel IOMMU configuration if hardware supports it (DMAR table detected)
+# Default: false — IOMMU passthrough disables memory over-commitment; enable only for NVMe/PCIe passthrough
+# When true: sets intel_iommu=on in GRUB and reboots if needed
+kvm_host_performance_enable_iommu: false
+...

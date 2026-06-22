@@ -1,0 +1,15 @@
+---
+galaxy_info:
+  author: "heatmiser"
+  role_name: kvm_deploy_vm
+  namespace: elise
+  description: "Validate OS disk, create volumes, generate VM kickstart, define and boot VM via libvirt"
+  license: GPL-3.0-only
+  min_ansible_version: "2.16"
+  platforms:
+    - name: EL
+      versions:
+        - "9"
+
+dependencies: []
+...

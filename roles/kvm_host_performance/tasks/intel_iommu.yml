@@ -1,0 +1,32 @@
+---
+# sub | Configure Intel IOMMU kernel parameters
+# Called from main.yml when DMAR table detected and kvm_host_performance_enable_iommu: true
+
+- name: "Sub | Read kernel command line"
+  ansible.builtin.slurp:
+    src: /proc/cmdline
+  register: __kvm_host_performance_cmdline
+
+- name: "Sub | Determine if intel_iommu is already enabled"
+  ansible.builtin.set_fact:
+    __kvm_host_performance_iommu_on: >-
+      {{ 'intel_iommu=on' in (__kvm_host_performance_cmdline.content | b64decode) }}
+
+- name: "Sub | Ensure intel_iommu=on in kernel cmdline arguments"
+  ansible.builtin.command: "grubby --update-kernel=DEFAULT --args='intel_iommu=on'"
+  register: __kvm_host_performance_grubby_out
+  changed_when: __kvm_host_performance_grubby_out.rc == 0
+  when: not __kvm_host_performance_iommu_on | bool
+
+- name: "Sub | Update GRUB configuration"
+  ansible.builtin.command: "grub2-mkconfig -o /boot/grub2/grub.cfg"
+  register: __kvm_host_performance_grub_out
+  changed_when: __kvm_host_performance_grub_out.rc == 0
+  when: not __kvm_host_performance_iommu_on | bool
+
+- name: "Sub | Reboot and wait for Intel IOMMU activation"
+  ansible.builtin.reboot:
+    post_reboot_delay: 15
+    reboot_timeout: 900
+  when: not __kvm_host_performance_iommu_on | bool
+...

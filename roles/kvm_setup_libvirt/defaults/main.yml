@@ -1,0 +1,51 @@
+---
+# kvm_setup_libvirt role defaults
+
+# =====================================================================
+# --- Bridge and Network Configuration ---
+# =====================================================================
+
+# Name of the Linux bridge and libvirt bridge connection
+# Default: br1 — second bridge; br0 is conventionally the management/OS bridge
+kvm_setup_libvirt_bridge_name: "br1"
+
+# Name of the libvirt network definition
+# Default: libvirt_net1 — incremental naming leaves room for libvirt_net2, etc.
+kvm_setup_libvirt_network_name: "libvirt_net1"
+
+# libvirt network forward mode
+# Default: bridge — directly bridges to the physical network (no NAT)
+kvm_setup_libvirt_network_mode: "bridge"
+
+# Bridge MTU
+# Default: 1500 — standard Ethernet MTU; increase to 9000 for jumbo frames if switch supports it
+kvm_setup_libvirt_network_mtu: 1500
+
+# =====================================================================
+# --- Storage Pool Configuration ---
+# =====================================================================
+# These variables are shared with kvm_setup_raid (which creates the pools)
+# and kvm_distribute_iso, kvm_deploy_vm, kvm_remove_vm (which use the paths).
+# Define these in wrapper group_vars to override for your environment.
+
+# Mount path for the filesystem (dir-type) libvirt storage pool
+# Default: derives from kvm_setup_raid_name default (md0)
+# Lab used: /mnt/md0/libvirt/filesystem (matches default)
+kvm_setup_libvirt_pool_filesystem_path: "/mnt/{{ kvm_setup_raid_name }}/libvirt/filesystem"
+
+# Libvirt name for the filesystem storage pool
+# Default: nvme_pool_fs — descriptive, avoids collision with default storage pools
+kvm_setup_libvirt_pool_filesystem_name: "nvme_pool_fs"
+
+# Libvirt pool type for the filesystem pool
+# Default: dir — directory-based pool for file-backed VM disk images
+kvm_setup_libvirt_pool_filesystem_type: "dir"
+
+# Libvirt name for the block (LVM logical) storage pool
+# Default: nvme_pool_block — descriptive, avoids collision
+kvm_setup_libvirt_pool_block_name: "nvme_pool_block"
+
+# Libvirt pool type for the block pool
+# Default: logical — LVM logical volume pool for direct block access (best performance)
+kvm_setup_libvirt_pool_block_type: "logical"
+...

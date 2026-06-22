@@ -1,0 +1,152 @@
+---
+# =====================================================================
+# VM Deployment: OS Disk Validation + Volume Creation + Kickstart + Boot
+# =====================================================================
+
+- name: "Validate OS disk capacity for VM: {{ vm.vmname }}"
+  ansible.builtin.include_tasks: validate_os_disk.yml
+
+# =====================================================================
+# --- Volume Creation ---
+# =====================================================================
+
+- name: "Create filesystem-mode disk images for VM: {{ vm.vmname }}"
+  ansible.builtin.command: >-
+    qemu-img create -f raw
+    {{ kvm_setup_libvirt_pool_filesystem_path }}/{{ item.name }}.img
+    {{ item.disk.capacity }}G
+  loop: "{{ vm.disks | selectattr('disk.volume_mode', 'equalto', 'filesystem') | list }}"
+  args:
+    creates: "{{ kvm_setup_libvirt_pool_filesystem_path }}/{{ item.name }}.img"
+  become: true
+
+- name: "Create block-mode logical volumes for VM: {{ vm.vmname }}"
+  community.general.lvol:
+    vg: "{{ kvm_setup_raid_lvm_vg_block_name }}"
+    lv: "{{ item.name }}"
+    size: "{{ item.disk.capacity }}g"
+  loop: "{{ vm.disks | selectattr('disk.volume_mode', 'equalto', 'block') | list }}"
+  become: true
+
+- name: "Set SELinux context for filesystem-mode images: {{ vm.vmname }}"
+  ansible.builtin.file:
+    path: "{{ kvm_setup_libvirt_pool_filesystem_path }}/{{ item.name }}.img"
+    setype: virt_image_t
+  loop: "{{ vm.disks | selectattr('disk.volume_mode', 'equalto', 'filesystem') | list }}"
+  become: true
+
+# =====================================================================
+# --- Kickstart Generation ---
+# =====================================================================
+
+- name: "Ensure kickstart directory exists in filesystem pool: {{ vm.vmname }}"
+  ansible.builtin.file:
+    path: "{{ kvm_setup_libvirt_pool_filesystem_path }}/kickstart"
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
+- name: "Generate VM kickstart configuration from template: {{ vm.vmname }}"
+  ansible.builtin.template:
+    src: vm_ks.cfg.j2
+    dest: "{{ kvm_setup_libvirt_pool_filesystem_path }}/kickstart/{{ vm.vmname }}-ks.cfg"
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+
+- name: "Create empty 10MB image file for VM kickstart: {{ vm.vmname }}"
+  ansible.builtin.command: >-
+    dd if=/dev/zero
+    of={{ kvm_setup_libvirt_pool_filesystem_path }}/kickstart/{{ vm.vmname }}-ks.img
+    bs=1M count=10
+  changed_when: true
+  become: true
+
+- name: "Format the image file as FAT32 with label OEMDRV: {{ vm.vmname }}"
+  ansible.builtin.command: >-
+    mkfs.vfat -F 32 -n OEMDRV
+    {{ kvm_setup_libvirt_pool_filesystem_path }}/kickstart/{{ vm.vmname }}-ks.img
+  changed_when: true
+  become: true
+
+- name: "Copy ks.cfg into the FAT32 image using mcopy: {{ vm.vmname }}"
+  ansible.builtin.command: >-
+    mcopy -i {{ kvm_setup_libvirt_pool_filesystem_path }}/kickstart/{{ vm.vmname }}-ks.img
+    {{ kvm_setup_libvirt_pool_filesystem_path }}/kickstart/{{ vm.vmname }}-ks.cfg
+    ::/ks.cfg
+  changed_when: true
+  become: true
+
+- name: "Set correct ownership and SELinux context for kickstart files: {{ vm.vmname }}"
+  ansible.builtin.file:
+    path: "{{ kvm_setup_libvirt_pool_filesystem_path }}/kickstart/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+    setype: virt_image_t
+  loop:
+    - "{{ vm.vmname }}-ks.cfg"
+    - "{{ vm.vmname }}-ks.img"
+  become: true
+
+# =====================================================================
+# --- VM Definition and Installation ---
+# =====================================================================
+
+- name: "Template libvirt XML definition for installation: {{ vm.vmname }}"
+  ansible.builtin.template:
+    src: vm_definition.xml.j2
+    dest: "/tmp/{{ vm.vmname }}.xml"
+    mode: "0644"
+  delegate_to: localhost
+  vars:
+    vmname: "{{ vm.vmname }}"
+    vcpu: "{{ vm.vcpu }}"
+    memory: "{{ vm.memory }}"
+    disks: "{{ vm.disks }}"
+
+- name: "Define VM from XML: {{ vm.vmname }}"
+  community.libvirt.virt:
+    command: define
+    xml: "{{ lookup('file', '/tmp/' + vm.vmname + '.xml') }}"
+  become: true
+
+- name: "Start VM for kickstart installation: {{ vm.vmname }}"
+  community.libvirt.virt:
+    name: "{{ vm.vmname }}"
+    state: running
+    autostart: false
+  become: true
+
+# =====================================================================
+# --- Wait for Installation Completion ---
+# =====================================================================
+
+- name: "Wait for VM to become reachable via SSH: {{ vm.vmname }}"
+  ansible.builtin.wait_for:
+    host: "{{ vm.network.ipv4_address }}"
+    port: 22
+    state: started
+    delay: 60
+    timeout: 3600
+  delegate_to: localhost
+
+# =====================================================================
+# --- Post-Install VM Configuration ---
+# =====================================================================
+
+- name: "Enable autostart for VM: {{ vm.vmname }}"
+  community.libvirt.virt:
+    name: "{{ vm.vmname }}"
+    autostart: true
+  become: true
+
+- name: "Clean up temporary XML file: {{ vm.vmname }}"
+  ansible.builtin.file:
+    path: "/tmp/{{ vm.vmname }}.xml"
+    state: absent
+  delegate_to: localhost
+...

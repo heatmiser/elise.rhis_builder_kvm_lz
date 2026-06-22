@@ -1,0 +1,69 @@
+---
+# kvm_setup_raid role defaults
+
+# =====================================================================
+# --- RAID Array Configuration ---
+# =====================================================================
+
+# mdadm RAID level
+# Default: 10 — RAID 10 (striped mirrors) for optimal balance of performance and redundancy
+# Only RAID 10 is validated by kvm_detect_nvme_raid (requires >=4 disks)
+kvm_setup_raid_level: 10
+
+# RAID array device name (creates /dev/<name>)
+# Default: md0 — first mdadm device; increment for multiple arrays
+kvm_setup_raid_name: "md0"
+
+# RAID chunk size in KB
+# Default: 512 — IBM KVM best practice for NVMe-backed arrays with mixed workloads
+# Lab used: 512 (unchanged)
+kvm_setup_raid_chunk_size: 512
+
+# mdadm metadata version
+# Default: 1.2 — modern format with metadata at array start; required for RHEL 9 boot arrays
+kvm_setup_raid_metadata_version: "1.2"
+
+# Force recreation of an existing RAID array (destructive — use with caution)
+# Default: false — idempotent; existing arrays are left in place
+# Set true only when explicitly reprovisioning a hypervisor
+kvm_setup_raid_force_recreate: false
+
+# =====================================================================
+# --- LVM Volume Group Configuration ---
+# =====================================================================
+
+# Name of the LVM VG backing the filesystem (dir-type) libvirt pool
+# Default: vg_nvme_fs — descriptive, avoids collision with OS VGs
+kvm_setup_raid_lvm_vg_filesystem_name: "vg_nvme_fs"
+
+# Name of the LVM VG backing the block (logical-type) libvirt pool
+# Default: vg_nvme_block — descriptive, avoids collision with OS VGs
+kvm_setup_raid_lvm_vg_block_name: "vg_nvme_block"
+
+# =====================================================================
+# --- LVM Partition Percentage Allocation ---
+# =====================================================================
+# All three percentages must sum to <= 100.
+# Rule: filesystem_percent + block_percent + overhead_percent <= 100
+
+# % of RAID capacity allocated to the filesystem (dir-based) storage pool
+# Default: 15 — optimized for block-heavy workloads where most VMs use volume_mode: block
+# Lab override: 45 — lab VMs used a mix of filesystem and block mode disks
+# Increase this if VMs use volume_mode: filesystem or if staging large ISOs
+kvm_setup_raid_lvm_vg_filesystem_percent: 15
+
+# % of RAID capacity allocated to the block (LVM logical) storage pool
+# Default: 80 — the majority for block volumes; all lab prod VMs used volume_mode: block
+# Lab override: 50 — adjusted downward to give more room to filesystem pool in lab
+kvm_setup_raid_lvm_vg_block_percent: 80
+
+# % reserved for LVM metadata and partition overhead
+# Default: 5 — conservative overhead reservation for LVM PE alignment and partition table
+# Do not reduce below 2; LVM metadata overhead on large arrays can be significant
+kvm_setup_raid_lvm_overhead_percent: 5
+
+# % of each VG left unallocated for LVM snapshot reserve
+# Default: 15 — 15% of each VG is left as free PE for on-demand snapshots
+# Set to 0 to allocate the full VG to the pool LV (disables snapshot capability)
+kvm_setup_raid_lvm_snapshot_reserve_percent: 15
+...

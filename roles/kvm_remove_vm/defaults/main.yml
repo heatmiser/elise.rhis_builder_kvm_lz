@@ -1,0 +1,8 @@
+---
+# kvm_remove_vm role defaults
+# No role-specific tunables. The vm dict is the interface.
+
+# Cross-role variables consumed by this role (define in wrapper group_vars):
+#   kvm_setup_libvirt_pool_filesystem_path  — filesystem pool mount path
+#   kvm_setup_raid_lvm_vg_block_name        — block pool VG name
+...

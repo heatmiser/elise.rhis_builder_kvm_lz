@@ -1,0 +1,15 @@
+---
+galaxy_info:
+  author: "heatmiser"
+  role_name: kvm_detect_nvme_raid
+  namespace: elise
+  description: "Auto-detect Dell DC NVMe devices and verify RAID 10 capability"
+  license: GPL-3.0-only
+  min_ansible_version: "2.16"
+  platforms:
+    - name: EL
+      versions:
+        - "9"
+
+dependencies: []
+...

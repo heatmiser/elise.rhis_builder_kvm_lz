@@ -1,0 +1,27 @@
+---
+# kvm_distribute_iso role defaults
+
+# RHEL installation ISO filename
+# Default: rhel-9.7-x86_64-dvd.iso — current GA release at collection creation
+# Override with the actual ISO filename hosted on your HTTP server
+kvm_distribute_iso_filename: "rhel-9.7-x86_64-dvd.iso"
+
+# CentOS Stream Live ISO filename (used for bare-metal wipe workflow)
+# Default: CentOS-Stream-MIN-Live-Automation.x86_64-10.iso — minimal live image with ansible user
+kvm_distribute_iso_liveiso_filename: "CentOS-Stream-MIN-Live-Automation.x86_64-10.iso"
+
+# Base URL of the HTTP server hosting the ISOs
+# Required: no default — must be set in wrapper group_vars or inventory
+# Example: "http://provisioner.example.com/provision"
+# kvm_distribute_iso_http_server_base_url: ~
+
+# Stage ISO in tmpfs (/dev/shm) before copying to pool (lab optimization)
+# Default: false — download directly from HTTP server to pool
+# Lab override: true — pre-stages ISO in /dev/shm for faster repeated operations
+# When true, expects ISO to be pre-copied to kvm_distribute_iso_tmpfs_path
+kvm_distribute_iso_use_tmpfs: false
+
+# Path to tmpfs staging area (used when kvm_distribute_iso_use_tmpfs: true)
+# Default: /dev/shm — standard Linux shared memory filesystem
+kvm_distribute_iso_tmpfs_path: "/dev/shm"
+...

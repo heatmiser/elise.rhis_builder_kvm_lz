@@ -1,0 +1,155 @@
+---
+# =====================================================================
+# Libvirt Infrastructure Setup
+# =====================================================================
+# Installs libvirt, configures a bridge on the second NIC,
+# defines the libvirt bridge network, and configures firewall.
+# Storage pools are created by kvm_setup_raid.
+# =====================================================================
+
+- name: Ensure libvirt packages are installed
+  ansible.builtin.dnf:
+    name:
+      - "@virtualization-host-environment"
+      - NetworkManager
+    state: present
+
+- name: Enable and start libvirtd service
+  ansible.builtin.systemd:
+    name: libvirtd
+    enabled: true
+    state: started
+
+- name: Get all network interfaces with active links
+  ansible.builtin.shell: |
+    set -o pipefail
+    ip -o link show | grep 'state UP' | awk -F': ' '{print $2}' | grep -v '^lo$'
+  register: __kvm_setup_libvirt_active_interfaces
+  changed_when: false
+
+- name: Get primary interface MAC address
+  ansible.builtin.set_fact:
+    __kvm_setup_libvirt_primary_mac: "{{ host.mac | lower }}"
+
+- name: Find primary interface name by MAC address
+  ansible.builtin.shell: |
+    set -o pipefail
+    ip -o link show | grep -i "{{ __kvm_setup_libvirt_primary_mac }}" | awk -F': ' '{print $2}'
+  register: __kvm_setup_libvirt_primary_interface
+  changed_when: false
+
+- name: Select second NIC with active link for bridge
+  ansible.builtin.set_fact:
+    kvm_setup_libvirt_physical_interface: >-
+      {{ (__kvm_setup_libvirt_active_interfaces.stdout_lines
+      | reject('search', __kvm_setup_libvirt_primary_interface.stdout)
+      | list)[0] }}
+  when: __kvm_setup_libvirt_active_interfaces.stdout_lines | length > 1
+
+- name: Display selected interface for bridge
+  ansible.builtin.debug:
+    msg:
+      - "Primary interface (kickstart): {{ __kvm_setup_libvirt_primary_interface.stdout }}"
+      - "Bridge interface (libvirt): {{ kvm_setup_libvirt_physical_interface }}"
+    verbosity: 1
+
+- name: Get existing connections on physical interface
+  ansible.builtin.shell: |
+    set -o pipefail
+    nmcli -t -f NAME,DEVICE connection show | grep ":{{ kvm_setup_libvirt_physical_interface }}$" | cut -d: -f1
+  register: __kvm_setup_libvirt_existing_connections
+  changed_when: false
+  failed_when: false
+
+- name: Delete existing connections on physical interface
+  ansible.builtin.command: nmcli connection delete "{{ item }}"
+  loop: "{{ __kvm_setup_libvirt_existing_connections.stdout_lines }}"
+  when: __kvm_setup_libvirt_existing_connections.stdout_lines | length > 0
+  changed_when: true
+
+- name: Create bridge connection
+  community.general.nmcli:
+    type: bridge
+    conn_name: "{{ kvm_setup_libvirt_bridge_name }}"
+    ifname: "{{ kvm_setup_libvirt_bridge_name }}"
+    state: present
+    autoconnect: true
+    stp: false
+    method4: disabled
+    method6: disabled
+  register: __kvm_setup_libvirt_bridge_created
+
+- name: Add physical interface as bridge slave
+  community.general.nmcli:
+    type: ethernet
+    conn_name: "{{ kvm_setup_libvirt_bridge_name }}-slave"
+    ifname: "{{ kvm_setup_libvirt_physical_interface }}"
+    master: "{{ kvm_setup_libvirt_bridge_name }}"
+    slave_type: bridge
+    state: present
+    autoconnect: true
+  register: __kvm_setup_libvirt_slave_added
+
+- name: Bring up bridge connection
+  ansible.builtin.command: nmcli connection up {{ kvm_setup_libvirt_bridge_name }}
+  when: __kvm_setup_libvirt_bridge_created.changed or __kvm_setup_libvirt_slave_added.changed
+  changed_when: true
+
+- name: Wait for bridge to be active
+  ansible.builtin.wait_for:
+    timeout: 10
+  when: __kvm_setup_libvirt_bridge_created.changed or __kvm_setup_libvirt_slave_added.changed
+
+- name: Check if libvirt bridge network exists
+  ansible.builtin.command: virsh net-info {{ kvm_setup_libvirt_network_name }}
+  register: __kvm_setup_libvirt_network_check
+  failed_when: false
+  changed_when: false
+
+- name: Define libvirt bridge network
+  community.libvirt.virt_net:
+    command: define
+    name: "{{ kvm_setup_libvirt_network_name }}"
+    xml: |
+      <network>
+        <name>{{ kvm_setup_libvirt_network_name }}</name>
+        <forward mode='bridge'/>
+        <bridge name='{{ kvm_setup_libvirt_bridge_name }}'/>
+      </network>
+  when: __kvm_setup_libvirt_network_check.rc != 0
+
+- name: Start libvirt network
+  community.libvirt.virt_net:
+    name: "{{ kvm_setup_libvirt_network_name }}"
+    state: active
+
+- name: Enable autostart for libvirt network
+  ansible.builtin.command: virsh net-autostart {{ kvm_setup_libvirt_network_name }}
+  register: __kvm_setup_libvirt_net_autostart
+  changed_when: >-
+    'marked as autostarted' in __kvm_setup_libvirt_net_autostart.stdout
+    or 'autostart' in __kvm_setup_libvirt_net_autostart.stdout
+  failed_when: >-
+    __kvm_setup_libvirt_net_autostart.rc != 0
+    and 'already' not in __kvm_setup_libvirt_net_autostart.stderr
+
+- name: Configure firewall for libvirt
+  ansible.posix.firewalld:
+    zone: public
+    service: "{{ item }}"
+    permanent: true
+    state: enabled
+    immediate: true
+  loop:
+    - libvirt
+    - libvirt-tls
+  failed_when: false
+
+- name: Enable IP forwarding
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_forward
+    value: "1"
+    sysctl_set: true
+    state: present
+    reload: true
+...

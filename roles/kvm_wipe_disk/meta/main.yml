@@ -1,0 +1,15 @@
+---
+galaxy_info:
+  author: "heatmiser"
+  role_name: kvm_wipe_disk
+  namespace: elise
+  description: "Detect and wipe Dell BOSS/NVMe disks via blkdiscard, zero, shred, or nvme-format"
+  license: GPL-3.0-only
+  min_ansible_version: "2.16"
+  platforms:
+    - name: EL
+      versions:
+        - "9"
+
+dependencies: []
+...

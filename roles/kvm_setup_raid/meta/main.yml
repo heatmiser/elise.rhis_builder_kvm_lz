@@ -1,0 +1,15 @@
+---
+galaxy_info:
+  author: "heatmiser"
+  role_name: kvm_setup_raid
+  namespace: elise
+  description: "Create mdadm RAID 10, partition for dual LVM pools, define libvirt storage pools"
+  license: GPL-3.0-only
+  min_ansible_version: "2.16"
+  platforms:
+    - name: EL
+      versions:
+        - "9"
+
+dependencies: []
+...

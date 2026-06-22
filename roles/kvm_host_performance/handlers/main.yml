@@ -1,0 +1,16 @@
+---
+# Handlers for kvm_host_performance
+
+- name: "KVM module reload required"
+  # Stop all VMs before reloading — this handler assumes no VMs are running
+  # during initial host configuration. For live systems, reload manually.
+  ansible.builtin.shell: |
+    modprobe -r kvm_intel 2>/dev/null || modprobe -r kvm_amd 2>/dev/null || true
+    modprobe kvm
+  changed_when: true
+
+- name: "Libvirtd restart required"
+  ansible.builtin.systemd:
+    name: libvirtd
+    state: restarted
+...

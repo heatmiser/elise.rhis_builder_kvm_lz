@@ -1,0 +1,42 @@
+---
+name: Ansible Sanity Tests
+
+on:  # yamllint disable-line rule:truthy
+  push:
+  pull_request:
+
+jobs:
+  sanity:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    strategy:
+      matrix:
+        python-version:
+          - "3.11"
+          - "3.12"
+
+    steps:
+      - name: Checkout into collection path
+        uses: actions/checkout@v4
+        with:
+          path: ansible_collections/elise/rhis_builder_kvm_lz
+          persist-credentials: false
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install ansible-core
+        run: pip install ansible-core
+
+      - name: Install collection dependencies
+        working-directory: ansible_collections/elise/rhis_builder_kvm_lz
+        run: ansible-galaxy collection install -r collections/requirements.yml -p ../../..
+
+      - name: Run sanity tests
+        working-directory: ansible_collections/elise/rhis_builder_kvm_lz
+        run: ansible-test sanity --python ${{ matrix.python-version }}
+...

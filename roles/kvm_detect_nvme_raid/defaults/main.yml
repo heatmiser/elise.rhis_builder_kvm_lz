@@ -1,0 +1,9 @@
+---
+# kvm_detect_nvme_raid role defaults
+# This role auto-detects Dell DC NVMe SSD devices and verifies RAID 10 capability.
+# If host.additional_disks is already defined in host_vars, it takes precedence.
+
+# Minimum number of disks required for RAID 10
+# Default: 4 — minimum for RAID 10 (2+2 mirror pairs)
+kvm_detect_nvme_raid_min_disk_count: 4
+...

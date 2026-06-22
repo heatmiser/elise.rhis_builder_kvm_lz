@@ -1,0 +1,55 @@
+---
+# =====================================================================
+# ISO Distribution to Hypervisor Filesystem Pool
+# =====================================================================
+
+- name: Ensure ISO directory exists in filesystem pool
+  ansible.builtin.file:
+    path: "{{ kvm_setup_libvirt_pool_filesystem_path }}/iso"
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
+- name: Check if RHEL ISO already exists on hypervisor
+  ansible.builtin.stat:
+    path: "{{ kvm_setup_libvirt_pool_filesystem_path }}/iso/{{ kvm_distribute_iso_filename }}"
+  register: __kvm_distribute_iso_stat
+  become: true
+
+# --- Standard path: download from HTTP server ---
+
+- name: Download RHEL ISO from HTTP server to hypervisor
+  ansible.builtin.get_url:
+    url: "{{ kvm_distribute_iso_http_server_base_url }}/iso/{{ kvm_distribute_iso_filename }}"
+    dest: "{{ kvm_setup_libvirt_pool_filesystem_path }}/iso/{{ kvm_distribute_iso_filename }}"
+    mode: "0644"
+    owner: root
+    group: root
+  when:
+    - not __kvm_distribute_iso_stat.stat.exists
+    - not kvm_distribute_iso_use_tmpfs | bool
+  become: true
+
+# --- Lab optimization path: copy from pre-staged tmpfs ---
+
+- name: Copy RHEL ISO from tmpfs to hypervisor pool
+  ansible.builtin.copy:
+    src: "{{ kvm_distribute_iso_tmpfs_path }}/{{ kvm_distribute_iso_filename }}"
+    dest: "{{ kvm_setup_libvirt_pool_filesystem_path }}/iso/{{ kvm_distribute_iso_filename }}"
+    mode: "0644"
+    owner: root
+    group: root
+    remote_src: true
+  when:
+    - not __kvm_distribute_iso_stat.stat.exists
+    - kvm_distribute_iso_use_tmpfs | bool
+  become: true
+
+- name: Set correct SELinux context for ISO file
+  ansible.builtin.file:
+    path: "{{ kvm_setup_libvirt_pool_filesystem_path }}/iso/{{ kvm_distribute_iso_filename }}"
+    setype: virt_image_t
+  become: true
+...

@@ -1,0 +1,56 @@
+---
+# =====================================================================
+# Disk Wipe: Detection + Wipe Operations
+# =====================================================================
+# Runs on target hypervisor (booted from Live ISO via iDRAC).
+# Detects Dell BOSS and/or NVMe devices, then wipes each using
+# the configured method, then executes post_action.
+# =====================================================================
+
+- name: Ensure log directory exists
+  ansible.builtin.file:
+    path: "{{ kvm_wipe_disk_log_path }}"
+    state: directory
+    mode: "0700"
+    owner: root
+    group: root
+
+- name: Detect wipe targets
+  ansible.builtin.include_tasks: detect_targets.yml
+
+- name: Initialize wipe results
+  ansible.builtin.set_fact:
+    __kvm_wipe_disk_results: {}
+
+- name: Wipe each detected disk
+  ansible.builtin.include_tasks: wipe.yml
+  loop: "{{ __kvm_wipe_disk_targets }}"
+  loop_control:
+    loop_var: __kvm_wipe_disk_current_target
+
+- name: Display wipe results summary
+  ansible.builtin.debug:
+    msg:
+      - "==================================================="
+      - "Wipe Results for {{ inventory_hostname }}"
+      - "==================================================="
+      - "{{ __kvm_wipe_disk_results }}"
+
+# =====================================================================
+# --- Post-Wipe Action ---
+# =====================================================================
+
+- name: Power off host after wipe
+  community.general.shutdown:
+    msg: "kvm_wipe_disk: wipe complete, powering off"
+    delay: 0
+  when: kvm_wipe_disk_post_action == "poweroff"
+  become: true
+
+- name: Reboot host after wipe
+  ansible.builtin.reboot:
+    post_reboot_delay: 15
+    reboot_timeout: 600
+  when: kvm_wipe_disk_post_action == "reboot"
+  become: true
+...

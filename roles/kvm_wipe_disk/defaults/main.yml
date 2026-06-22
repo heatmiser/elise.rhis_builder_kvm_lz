@@ -1,0 +1,30 @@
+---
+# kvm_wipe_disk role defaults
+
+# Wipe method to use on detected disks
+# Default: blkdiscard — SSD TRIM/UNMAP; near-instant on NVMe; not DoD-compliant
+# Options:
+#   blkdiscard — SSD TRIM/UNMAP (fastest, NVMe/SSD only)
+#   zero       — dd zeros (fast, not DoD-compliant)
+#   shred      — 3-pass overwrite (DoD-compliant, very slow)
+#   nvme-format — NVMe hardware secure erase (fastest, NVMe only, destructive to drive)
+kvm_wipe_disk_method: "blkdiscard"
+
+# Target Dell BOSS devices for wiping
+# Default: true — BOSS holds the OS; wipe it to force reprovisioning
+# Set false if preserving the OS on BOSS while wiping only NVMe data drives
+kvm_wipe_disk_boss_devices: true
+
+# Target Dell DC NVMe devices for wiping
+# Default: true — NVMe holds RAID/VM data
+kvm_wipe_disk_nvme_devices: true
+
+# Post-wipe action
+# Default: poweroff — server is ready for iDRAC-mediated reprovisioning
+# Options: poweroff, reboot, none
+kvm_wipe_disk_post_action: "poweroff"
+
+# Path for wipe operation log files
+# Default: /tmp/wipe — temporary; wrapper fetches logs before post_action
+kvm_wipe_disk_log_path: "/tmp/wipe"
+...

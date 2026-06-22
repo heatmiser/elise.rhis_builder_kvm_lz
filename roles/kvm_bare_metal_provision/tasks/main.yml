@@ -1,0 +1,37 @@
+---
+# =====================================================================
+# Bare Metal Kickstart and OEMDRV Image Generation
+# =====================================================================
+# Runs on localhost (Ansible controller) to generate per-host kickstart
+# files and FAT32 OEMDRV USB images for iDRAC virtual media delivery.
+#
+# Expects: host dict with hostname, domain, mac, network, filesystem,
+#          disk, and credential fields.
+# =====================================================================
+
+- name: Generate kickstart configuration from template
+  ansible.builtin.template:
+    src: ks.cfg.j2
+    dest: "{{ kvm_bare_metal_provision_local_workspace }}/ks-{{ host.hostname }}.cfg"
+    mode: "0644"
+
+- name: Create empty 10MB image file for Kickstart OEMDRV
+  ansible.builtin.command: >-
+    dd if=/dev/zero
+    of={{ kvm_bare_metal_provision_local_workspace }}/{{ host.hostname }}-{{ kvm_bare_metal_provision_img_filename }}
+    bs=1M count=10
+  changed_when: true
+
+- name: Format the local image file as FAT32 with label OEMDRV
+  ansible.builtin.command: >-
+    mkfs.vfat -F 32 -n OEMDRV
+    {{ kvm_bare_metal_provision_local_workspace }}/{{ host.hostname }}-{{ kvm_bare_metal_provision_img_filename }}
+  changed_when: true
+
+- name: Copy ks.cfg into the local FAT32 image using mcopy
+  ansible.builtin.command: >-
+    mcopy -i {{ kvm_bare_metal_provision_local_workspace }}/{{ host.hostname }}-{{ kvm_bare_metal_provision_img_filename }}
+    {{ kvm_bare_metal_provision_local_workspace }}/ks-{{ host.hostname }}.cfg
+    ::/ks.cfg
+  changed_when: true
+...

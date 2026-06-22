@@ -1,0 +1,56 @@
+---
+# =====================================================================
+# NVMe Device Auto-Detection and RAID Capability Verification
+# =====================================================================
+# Detects Dell DC NVMe devices and verifies RAID 10 capability.
+# If host.additional_disks is not defined in host_vars, it will be
+# auto-populated from detected devices. If already defined, host_vars
+# takes precedence.
+# =====================================================================
+
+- name: Detect Dell DC NVMe SSD devices
+  ansible.builtin.shell: |
+    set -o pipefail
+    find /dev/disk/by-id -name "*Dell_DC_NVMe*" 2>/dev/null | \
+      grep -E -v 'part|scsi' | grep -v '_1$' | xargs readlink -f | sort
+  register: kvm_detect_nvme_raid_detected_devices
+  changed_when: false
+  failed_when: false
+
+- name: Set additional_disks from auto-detection if not defined
+  ansible.builtin.set_fact:
+    host: "{{ host | combine({'additional_disks': kvm_detect_nvme_raid_detected_devices.stdout_lines}, recursive=true) }}"
+  when:
+    - host.additional_disks is not defined
+    - kvm_detect_nvme_raid_detected_devices.rc == 0
+    - kvm_detect_nvme_raid_detected_devices.stdout_lines | length >= kvm_detect_nvme_raid_min_disk_count
+
+- name: Display disk source
+  ansible.builtin.debug:
+    msg: >-
+      Disk source: {{ 'Auto-detected Dell DC NVMe'
+      if (host.additional_disks is defined
+      and kvm_detect_nvme_raid_detected_devices.rc == 0
+      and kvm_detect_nvme_raid_detected_devices.stdout_lines | length >= kvm_detect_nvme_raid_min_disk_count)
+      else 'Configured from host_vars' }}
+    verbosity: 1
+
+- name: Verify additional disks are defined
+  ansible.builtin.assert:
+    that:
+      - host.additional_disks is defined
+      - host.additional_disks | length >= kvm_detect_nvme_raid_min_disk_count
+    fail_msg: >-
+      RAID 10 requires at least {{ kvm_detect_nvme_raid_min_disk_count }} disks.
+      Found {{ host.additional_disks | default([]) | length }} disks.
+    success_msg: "Found {{ host.additional_disks | length }} disks for RAID 10 array."
+
+- name: Display RAID configuration
+  ansible.builtin.debug:
+    msg:
+      - "RAID Level: {{ kvm_setup_raid_level | default('10') }}"
+      - "RAID Name: {{ kvm_setup_raid_name | default('md0') }}"
+      - "Number of devices: {{ host.additional_disks | length }}"
+      - "Devices: {{ host.additional_disks }}"
+    verbosity: 1
+...

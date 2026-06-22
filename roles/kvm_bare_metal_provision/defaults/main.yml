@@ -1,0 +1,12 @@
+---
+# kvm_bare_metal_provision role defaults
+
+# Local workspace directory on the Ansible controller
+# Default: /tmp/kickstart — temporary workspace; override for persistent storage
+# Must be writable by the Ansible user; cleared between runs is acceptable
+kvm_bare_metal_provision_local_workspace: "/tmp/kickstart"
+
+# OEMDRV USB image filename
+# Default: oemdrv.img — Dell iDRAC recognizes OEMDRV label for kickstart auto-detection
+kvm_bare_metal_provision_img_filename: "oemdrv.img"
+...

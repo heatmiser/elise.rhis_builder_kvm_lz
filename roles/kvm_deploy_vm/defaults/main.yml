@@ -1,0 +1,13 @@
+---
+# kvm_deploy_vm role defaults
+# This role operates on the vm dict (from vm_vars.yml) and requires
+# several cross-role variables defined by kvm_setup_raid and kvm_setup_libvirt.
+# No role-specific tunables — the vm dict and cross-role vars are the interface.
+
+# Cross-role variables consumed by this role (define in wrapper group_vars):
+#   kvm_setup_libvirt_pool_filesystem_path  — filesystem pool mount path
+#   kvm_setup_raid_lvm_vg_block_name        — block pool VG name
+#   kvm_setup_libvirt_network_name          — libvirt network name
+#   kvm_setup_libvirt_bridge_name           — libvirt bridge name
+#   kvm_distribute_iso_filename             — RHEL ISO filename
+...

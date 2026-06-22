@@ -1,0 +1,15 @@
+---
+galaxy_info:
+  author: "heatmiser"
+  role_name: kvm_remove_vm
+  namespace: elise
+  description: "Destroy VM, remove storage volumes and kickstart artifacts from libvirt"
+  license: GPL-3.0-only
+  min_ansible_version: "2.16"
+  platforms:
+    - name: EL
+      versions:
+        - "9"
+
+dependencies: []
+...
