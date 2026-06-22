@@ -22,7 +22,7 @@ Automates bare-metal RHEL 9 deployment on Dell PowerEdge servers and KVM VM prov
 
 ## Requirements
 
-- Ansible >= 2.14
+- Ansible >= 2.16
 - RHEL 9 target hosts
 - Dell PowerEdge with iDRAC 9+ (for bare-metal phases)
 - Python 3.9+ on controller
